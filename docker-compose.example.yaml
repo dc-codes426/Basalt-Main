@@ -10,6 +10,6 @@ services:
     ports:
       - "6379:6379"
     volumes:
-      - redix_data:/data
+      - redis_data:/data
 volumes:
   redis_data:

@@ -1,9 +1,14 @@
 services:
   vultiserver:
-    image: basalt-vultiserver:latest
+    build: ../basalt-vultiserver
     container_name: basalt-vultiserver
     ports:
       - "8080:8080"
+    volumes:
+      - ./config.yaml:/root/config.yaml
+      - vultiserver_vaults:/root/vaults
+    depends_on:
+      - redis
   redis:
     image: redis:latest
     container_name: basalt-redis
@@ -13,3 +18,4 @@ services:
       - redis_data:/data
 volumes:
   redis_data:
+  vultiserver_vaults:

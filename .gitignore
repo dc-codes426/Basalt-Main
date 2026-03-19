@@ -1,5 +1,12 @@
 CLAUDE.md
 logs/
+
+# Docker compose - only commit the example
+docker-compose.yaml
 docker-compose.*.yaml
 !docker-compose.example.yaml
-docker-compose.yaml
+
+# Config - only commit the example
+config.yaml
+config.*.yaml
+!config.example.yaml

@@ -1,0 +1,19 @@
+server:
+  port: "8080"
+  host: "0.0.0.0"
+  vaults_file_path: "vaults"
+
+redis:
+  host: "redis"
+  port: "6379"
+  password: ""
+
+relay:
+  server: "http://localhost:8080/router"
+
+block_storage:
+  host: ""
+  region: ""
+  access_key: ""
+  secret: ""
+  bucket: ""

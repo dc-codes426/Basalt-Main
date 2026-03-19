@@ -1,2 +1,5 @@
 CLAUDE.md
 logs/
+docker-compose.*.yaml
+!docker-compose.example.yaml
+

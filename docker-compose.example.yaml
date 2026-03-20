@@ -1,9 +1,16 @@
 services:
+  networking:
+    build: ../basalt-networking
+    container_name: basalt-networking
+    ports:
+      - "80:80"
+    environment:
+      - UPSTREAM_URL=http://vultiserver:8080
+    depends_on:
+      - vultiserver
   vultiserver:
     build: ../basalt-vultiserver
     container_name: basalt-vultiserver
-    ports:
-      - "8080:8080"
     volumes:
       - ./config.yaml:/root/config.yaml
       - vultiserver_vaults:/root/vaults

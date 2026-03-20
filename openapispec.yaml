@@ -1,0 +1,33 @@
+openapi: 3.1.0
+info:
+  title: Basalt API
+  description: External-facing API for Basalt TSS server.
+  version: 0.1.0
+
+servers:
+  - url: http://localhost
+    description: Local development
+
+paths:
+  /health:
+    get:
+      summary: Ping
+      description: Returns a health check response indicating whether the server and its backing services are reachable.
+      operationId: ping
+      responses:
+        "200":
+          description: Server is healthy.
+          content:
+            text/plain:
+              schema:
+                type: string
+                examples:
+                  - pong
+        "502":
+          description: One or more backing services are unreachable.
+          content:
+            text/plain:
+              schema:
+                type: string
+                examples:
+                  - Bad Gateway

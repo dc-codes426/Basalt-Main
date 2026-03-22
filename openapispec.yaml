@@ -207,6 +207,8 @@ paths:
                 $ref: "#/components/schemas/VaultGetResponse"
         "400":
           $ref: "#/components/responses/BadRequest"
+        "404":
+          description: Vault not found
 
   /vault/exist/{publicKeyECDSA}:
     get:
@@ -220,6 +222,8 @@ paths:
       responses:
         "200":
           description: Vault exists
+        "400":
+          $ref: "#/components/responses/BadRequest"
         "404":
           description: Vault not found
 

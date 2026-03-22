@@ -5,8 +5,9 @@ logs/
 docker-compose.yaml
 docker-compose.*.yaml
 !docker-compose.example.yaml
+!docker-compose.phala.yaml
 
 # Config - only commit the example
 config.yaml
 config.*.yaml
-!config.example.yaml
+config.example.yaml

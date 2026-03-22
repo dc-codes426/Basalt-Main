@@ -1,0 +1,111 @@
+services:
+  networking:
+    image: ghcr.io/dc-codes426/basalt-networking:latest
+    container_name: basalt-networking
+    ports:
+      - "80:80"
+    environment:
+      - UPSTREAM_URL=http://vultiserver:8080
+    depends_on:
+      - vultiserver
+    logging:
+      driver: json-file
+      options:
+        max-size: "100m"
+        max-file: "5"
+    restart: always
+
+  vultiserver:
+    image: ghcr.io/dc-codes426/basalt-vultiserver:latest
+    container_name: basalt-vultiserver
+    ports:
+      - "8080:8080"
+    volumes:
+      - /var/run/dstack.sock:/var/run/dstack.sock
+      - vultiserver_vaults:/root/vaults
+    environment:
+      SERVER_HOST: "0.0.0.0"
+      SERVER_PORT: "8080"
+      SERVER_VAULTS_PATH: "vaults"
+      REDIS_HOST: redis
+      REDIS_PORT: "6379"
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-}
+      RELAY_SERVER: ${RELAY_SERVER:-https://api.vultisig.com/router}
+      BLOCK_STORAGE_HOST: http://minio:9000
+      BLOCK_STORAGE_REGION: us-east-1
+      BLOCK_STORAGE_ACCESS_KEY: ${MINIO_ROOT_USER:-minioadmin}
+      BLOCK_STORAGE_SECRET: ${MINIO_ROOT_PASSWORD}
+      BLOCK_STORAGE_BUCKET: ${BLOCK_STORAGE_BUCKET:-vaults}
+    depends_on:
+      - redis
+      - minio-init
+    logging:
+      driver: json-file
+      options:
+        max-size: "100m"
+        max-file: "5"
+    restart: always
+
+  redis:
+    image: redis:7-alpine
+    container_name: basalt-redis
+    command: redis-server --requirepass ${REDIS_PASSWORD:-}
+    volumes:
+      - redis_data:/data
+    logging:
+      driver: json-file
+      options:
+        max-size: "100m"
+        max-file: "5"
+    restart: always
+
+  admin-internal:
+    image: ghcr.io/dc-codes426/basalt-admin-internal:latest
+    container_name: basalt-admin-internal
+    ports:
+      - "3001:3000"
+    logging:
+      driver: json-file
+      options:
+        max-size: "100m"
+        max-file: "5"
+    restart: always
+
+  minio:
+    image: minio/minio:latest
+    container_name: basalt-minio
+    command: server /data
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-minioadmin}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
+    volumes:
+      - minio_data:/data
+    logging:
+      driver: json-file
+      options:
+        max-size: "100m"
+        max-file: "5"
+    restart: always
+
+  minio-init:
+    image: minio/mc:latest
+    container_name: basalt-minio-init
+    depends_on:
+      - minio
+    entrypoint: >
+      /bin/sh -c "
+      for i in 1 2 3 4 5 6; do
+        mc alias set local http://minio:9000 $${MINIO_ROOT_USER:-minioadmin} $${MINIO_ROOT_PASSWORD} && break;
+        echo 'Waiting for MinIO...' && sleep 5;
+      done &&
+      mc mb --ignore-existing local/$${BLOCK_STORAGE_BUCKET:-vaults}
+      "
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-minioadmin}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
+      BLOCK_STORAGE_BUCKET: ${BLOCK_STORAGE_BUCKET:-vaults}
+
+volumes:
+  redis_data:
+  vultiserver_vaults:
+  minio_data:

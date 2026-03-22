@@ -1,6 +1,6 @@
 services:
   networking:
-    image: ghcr.io/dc-codes426/basalt-networking:latest
+    image: ghcr.io/dc-codes426/basalt-networking:aa5840a51f060779dd3a21e4479bce9404b8b32d
     container_name: basalt-networking
     ports:
       - "80:80"
@@ -16,7 +16,7 @@ services:
     restart: always
 
   vultiserver:
-    image: ghcr.io/dc-codes426/basalt-vultiserver:latest
+    image: ghcr.io/dc-codes426/basalt-vultiserver:65cb0c36571dc75ef10b5f599e38d7434c713871
     container_name: basalt-vultiserver
     ports:
       - "8080:8080"
@@ -60,7 +60,7 @@ services:
     restart: always
 
   admin-internal:
-    image: ghcr.io/dc-codes426/basalt-admin-internal:latest
+    image: ghcr.io/dc-codes426/basalt-admin-internal:62a127f9760c1409d1e423cd9288cd845660a8bb
     container_name: basalt-admin-internal
     ports:
       - "3001:3000"

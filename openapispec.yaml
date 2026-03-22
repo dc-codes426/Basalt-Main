@@ -373,7 +373,7 @@ components:
           schema:
             $ref: "#/components/schemas/Error"
     TooManyRequests:
-      description: Rate limit exceeded (5 req/s, 30 burst, 5-min window)
+      description: Rate limit exceeded (10 req/s, 100 burst)
       content:
         application/json:
           schema:

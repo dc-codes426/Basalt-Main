@@ -44,6 +44,28 @@ paths:
               schema:
                 type: string
 
+  /health:
+    get:
+      operationId: health
+      summary: Dependency health check
+      description: |
+        Returns the health status of all dependent services (vultiserver,
+        networking, redis). Proxied from the admin-internal service.
+      tags: [Health]
+      responses:
+        "200":
+          description: All dependencies are healthy
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HealthResponse"
+        "503":
+          description: One or more dependencies are unhealthy
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HealthResponse"
+
   /getDerivedPublicKey:
     get:
       operationId: getDerivedPublicKey
@@ -387,6 +409,34 @@ components:
           type: string
           description: Human-readable error message
           example: "fail to parse request, err: invalid session_id"
+
+    ContainerStatus:
+      type: object
+      required:
+        - name
+        - healthy
+        - detail
+      properties:
+        name:
+          type: string
+          description: Service name
+        healthy:
+          type: boolean
+          description: Whether the service responded successfully
+        detail:
+          type: string
+          description: Response body on success, or error message on failure
+
+    HealthResponse:
+      type: object
+      required:
+        - containers
+      properties:
+        containers:
+          type: array
+          items:
+            $ref: "#/components/schemas/ContainerStatus"
+          description: Health status of each monitored service
 
     LibType:
       type: integer

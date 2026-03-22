@@ -9,16 +9,16 @@ info:
     operations backed by Redis. Most mutating endpoints enqueue an async task
     and return immediately.
   version: 1.0.0
-  contact:
-    name: Vultisig
-    url: https://github.com/vultisig/vultiserver
+#  contact:
+#    name: Vultisig
+#    url: https://github.com/vultisig/vultiserver
   license:
     name: MIT
-    url: https://github.com/vultisig/vultiserver/blob/main/LICENSE
+    identifier: MIT
 
 servers:
-  - url: https://api.vultisig.com/router
-    description: Production
+#  - url: https://api.vultisig.com/router
+#    description: Production
   - url: http://localhost:8080
     description: Local development
 

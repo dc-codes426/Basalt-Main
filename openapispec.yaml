@@ -37,6 +37,12 @@ paths:
               schema:
                 type: string
                 example: Vultiserver is running
+        "503":
+          description: One or more dependencies are unhealthy
+          content:
+            text/plain:
+              schema:
+                type: string
 
   /getDerivedPublicKey:
     get:

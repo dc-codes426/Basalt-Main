@@ -130,10 +130,6 @@ paths:
       responses:
         "200":
           description: Vault creation initiated
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/VaultCreateResponse"
         "400":
           $ref: "#/components/responses/BadRequest"
         "429":
@@ -481,23 +477,6 @@ components:
           description: Password used to encrypt the vault backup
         lib_type:
           $ref: "#/components/schemas/LibType"
-
-    VaultCreateResponse:
-      type: object
-      properties:
-        session_id:
-          type: string
-          format: uuid
-          description: Session identifier
-        hex_encryption_key:
-          type: string
-          description: Hex-encoded encryption key
-        hex_chain_code:
-          type: string
-          description: Hex-encoded chain code
-        keygen_msg:
-          type: string
-          description: Encoded message for QR code display during keygen ceremony
 
     VaultGetResponse:
       type: object

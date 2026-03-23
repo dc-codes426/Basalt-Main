@@ -76,11 +76,14 @@ services:
   minio:
     image: minio/minio:latest
     container_name: basalt-minio
-    command: server /data
+    entrypoint: /bin/sh /minio-entrypoint.sh
     environment:
       MINIO_ROOT_USER: ${MINIO_ROOT_USER:-minioadmin}
       MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
+      MINIO_SSE_KEY_PATH: basalt/vault-encryption
     volumes:
+      - /var/run/dstack.sock:/var/run/dstack.sock
+      - ./minio-entrypoint.sh:/minio-entrypoint.sh:ro
       - minio_data:/data
     logging:
       driver: json-file
@@ -100,7 +103,9 @@ services:
         mc alias set local http://minio:9000 $${MINIO_ROOT_USER:-minioadmin} $${MINIO_ROOT_PASSWORD} && break;
         echo 'Waiting for MinIO...' && sleep 5;
       done &&
-      mc mb --ignore-existing local/$${BLOCK_STORAGE_BUCKET:-vaults}
+      mc mb --ignore-existing local/$${BLOCK_STORAGE_BUCKET:-vaults} &&
+      mc encrypt set sse-s3 local/$${BLOCK_STORAGE_BUCKET:-vaults} &&
+      echo 'Bucket auto-encryption enabled (SSE-S3).'
       "
     environment:
       MINIO_ROOT_USER: ${MINIO_ROOT_USER:-minioadmin}

@@ -1,30 +1,34 @@
 #!/bin/sh
 set -e
 
-DSTACK_SOCKET="/var/run/dstack.sock"
-KEY_PATH="${MINIO_SSE_KEY_PATH:-basalt/vault-encryption}"
+# shellcheck source=dstack-derive.sh
+. /dstack-derive.sh
 
-if [ -S "$DSTACK_SOCKET" ]; then
-    echo "Deriving MinIO master key from dstack TEE..."
-    RESPONSE=$(curl -sf --unix-socket "$DSTACK_SOCKET" \
-        -X POST "http://localhost/prpc/Getkey" \
-        -H "Content-Type: application/json" \
-        -d "{\"path\":\"${KEY_PATH}\"}")
-    # Extract hex key from JSON response. Adjust field name if dstack API differs.
-    HEX_KEY=$(echo "$RESPONSE" | sed -n 's/.*"key"[[:space:]]*:[[:space:]]*"\([0-9a-fA-F]*\)".*/\1/p')
-    if [ -z "$HEX_KEY" ]; then
-        echo "ERROR: Failed to derive key from dstack. Response: $RESPONSE" >&2
-        exit 1
-    fi
-    echo "Successfully derived master key from dstack TEE."
-elif [ -n "$MINIO_SSE_MASTER_KEY" ]; then
-    echo "Using static master key from environment."
-    HEX_KEY="$MINIO_SSE_MASTER_KEY"
+# --- Derive MinIO root password from TEE ---
+DERIVED_PASSWORD=$(derive_key "basalt/minio-password") || true
+if [ -n "$DERIVED_PASSWORD" ]; then
+    echo "MinIO root password derived from dstack TEE."
+    export MINIO_ROOT_PASSWORD="$DERIVED_PASSWORD"
+elif [ -n "$MINIO_ROOT_PASSWORD" ]; then
+    echo "Using MinIO root password from environment."
 else
-    echo "WARNING: No SSE master key available. Starting MinIO without encryption at rest."
-    exec minio server /data "$@"
+    echo "ERROR: No MinIO root password available." >&2
+    exit 1
 fi
 
-export MINIO_KMS_SECRET_KEY="basalt-vault-key:${HEX_KEY}"
-echo "MinIO SSE-S3 encryption enabled."
+# --- Derive SSE master key from TEE ---
+SSE_KEY_PATH="${MINIO_SSE_KEY_PATH:-basalt/vault-encryption}"
+DERIVED_SSE_KEY=$(derive_key "$SSE_KEY_PATH") || true
+if [ -n "$DERIVED_SSE_KEY" ]; then
+    echo "MinIO SSE master key derived from dstack TEE."
+    export MINIO_KMS_SECRET_KEY="basalt-vault-key:${DERIVED_SSE_KEY}"
+    echo "MinIO SSE-S3 encryption enabled."
+elif [ -n "$MINIO_SSE_MASTER_KEY" ]; then
+    echo "Using static SSE master key from environment."
+    export MINIO_KMS_SECRET_KEY="basalt-vault-key:${MINIO_SSE_MASTER_KEY}"
+    echo "MinIO SSE-S3 encryption enabled."
+else
+    echo "WARNING: No SSE master key available. Starting MinIO without encryption at rest."
+fi
+
 exec minio server /data "$@"

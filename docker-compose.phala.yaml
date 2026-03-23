@@ -18,10 +18,13 @@ services:
   vultiserver:
     image: ghcr.io/dc-codes426/basalt-vultiserver:01013b328735061ee034d5015557d49008c7ca80
     container_name: basalt-vultiserver
+    entrypoint: /bin/sh /basalt/vultiserver-entrypoint.sh
     ports:
       - "8080:8080"
     volumes:
       - /var/run/dstack.sock:/var/run/dstack.sock
+      - ./dstack-derive.sh:/dstack-derive.sh:ro
+      - ./vultiserver-entrypoint.sh:/basalt/vultiserver-entrypoint.sh:ro
       - vultiserver_vaults:/root/vaults
     environment:
       SERVER_HOST: "0.0.0.0"
@@ -29,12 +32,10 @@ services:
       SERVER_VAULTS_PATH: "vaults"
       REDIS_HOST: redis
       REDIS_PORT: "6379"
-      REDIS_PASSWORD: ${REDIS_PASSWORD:-}
       RELAY_SERVER: ${RELAY_SERVER:-https://api.vultisig.com/router}
       BLOCK_STORAGE_HOST: http://minio:9000
       BLOCK_STORAGE_REGION: us-east-1
       BLOCK_STORAGE_ACCESS_KEY: ${MINIO_ROOT_USER:-minioadmin}
-      BLOCK_STORAGE_SECRET: ${MINIO_ROOT_PASSWORD}
       BLOCK_STORAGE_BUCKET: ${BLOCK_STORAGE_BUCKET:-vaults}
     depends_on:
       - redis
@@ -49,8 +50,11 @@ services:
   redis:
     image: redis:7-alpine
     container_name: basalt-redis
-    command: redis-server --requirepass ${REDIS_PASSWORD:-}
+    entrypoint: /bin/sh /basalt/redis-entrypoint.sh
     volumes:
+      - /var/run/dstack.sock:/var/run/dstack.sock
+      - ./dstack-derive.sh:/dstack-derive.sh:ro
+      - ./redis-entrypoint.sh:/basalt/redis-entrypoint.sh:ro
       - redis_data:/data
     logging:
       driver: json-file
@@ -62,10 +66,13 @@ services:
   admin-internal:
     image: ghcr.io/dc-codes426/basalt-admin-internal:62a127f9760c1409d1e423cd9288cd845660a8bb
     container_name: basalt-admin-internal
+    entrypoint: /bin/sh /basalt/admin-internal-entrypoint.sh
     ports:
       - "3001:3000"
-    environment:
-      REDIS_PASSWORD: ${REDIS_PASSWORD}
+    volumes:
+      - /var/run/dstack.sock:/var/run/dstack.sock
+      - ./dstack-derive.sh:/dstack-derive.sh:ro
+      - ./admin-internal-entrypoint.sh:/basalt/admin-internal-entrypoint.sh:ro
     logging:
       driver: json-file
       options:
@@ -76,14 +83,14 @@ services:
   minio:
     image: minio/minio:latest
     container_name: basalt-minio
-    entrypoint: /bin/sh /minio-entrypoint.sh
+    entrypoint: /bin/sh /basalt/minio-entrypoint.sh
     environment:
       MINIO_ROOT_USER: ${MINIO_ROOT_USER:-minioadmin}
-      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
       MINIO_SSE_KEY_PATH: basalt/vault-encryption
     volumes:
       - /var/run/dstack.sock:/var/run/dstack.sock
-      - ./minio-entrypoint.sh:/minio-entrypoint.sh:ro
+      - ./dstack-derive.sh:/dstack-derive.sh:ro
+      - ./minio-entrypoint.sh:/basalt/minio-entrypoint.sh:ro
       - minio_data:/data
     logging:
       driver: json-file
@@ -97,20 +104,14 @@ services:
     container_name: basalt-minio-init
     depends_on:
       - minio
-    entrypoint: >
-      /bin/sh -c "
-      for i in 1 2 3 4 5 6; do
-        mc alias set local http://minio:9000 $${MINIO_ROOT_USER:-minioadmin} $${MINIO_ROOT_PASSWORD} && break;
-        echo 'Waiting for MinIO...' && sleep 5;
-      done &&
-      mc mb --ignore-existing local/$${BLOCK_STORAGE_BUCKET:-vaults} &&
-      mc encrypt set sse-s3 local/$${BLOCK_STORAGE_BUCKET:-vaults} &&
-      echo 'Bucket auto-encryption enabled (SSE-S3).'
-      "
+    entrypoint: /bin/sh /basalt/minio-init-entrypoint.sh
     environment:
       MINIO_ROOT_USER: ${MINIO_ROOT_USER:-minioadmin}
-      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
       BLOCK_STORAGE_BUCKET: ${BLOCK_STORAGE_BUCKET:-vaults}
+    volumes:
+      - /var/run/dstack.sock:/var/run/dstack.sock
+      - ./dstack-derive.sh:/dstack-derive.sh:ro
+      - ./minio-init-entrypoint.sh:/basalt/minio-init-entrypoint.sh:ro
 
 volumes:
   redis_data:

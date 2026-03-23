@@ -11,3 +11,8 @@ docker-compose.*.yaml
 config.yaml
 config.*.yaml
 config.example.yaml
+
+# Environment files (secrets)
+.env
+.env.*
+!.env.example

@@ -74,7 +74,7 @@ paths:
         Validates the vault creation request and returns a challenge nonce
         that must be signed with the client's passkey. The keygen ceremony
         is not started until the client submits a valid proof via
-        `/vault/create/proof`.
+        `/vault/create/prove`.
       tags: [Vault]
       requestBody:
         required: true
@@ -84,7 +84,7 @@ paths:
               $ref: "#/components/schemas/VaultCreateRequest"
       responses:
         "200":
-          description: Challenge issued; client must prove passkey ownership via `/vault/create/proof`.
+          description: Challenge issued; client must prove passkey ownership via `/vault/create/prove`.
           content:
             application/json:
               schema:
@@ -94,7 +94,7 @@ paths:
         "429":
           $ref: "#/components/responses/TooManyRequests"
 
-  /vault/create/proof:
+  /vault/create/prove:
     post:
       operationId: createVaultProof
       summary: Submit passkey proof to authorize vault creation
@@ -203,7 +203,7 @@ paths:
       description: |
         Validates the signing request and returns a challenge nonce that must
         be signed with the client's passkey. The actual signing task is not
-        enqueued until the client submits a valid proof via `/vault/sign/proof`.
+        enqueued until the client submits a valid proof via `/vault/sign/prove`.
       tags: [Signing]
       requestBody:
         required: true
@@ -213,7 +213,7 @@ paths:
               $ref: "#/components/schemas/KeysignRequest"
       responses:
         "200":
-          description: Challenge issued; client must prove passkey ownership via `/vault/sign/proof`.
+          description: Challenge issued; client must prove passkey ownership via `/vault/sign/prove`.
           content:
             application/json:
               schema:
@@ -223,7 +223,7 @@ paths:
         "429":
           $ref: "#/components/responses/TooManyRequests"
 
-  /vault/sign/proof:
+  /vault/sign/prove:
     post:
       operationId: signProof
       summary: Submit passkey proof to authorize signing
@@ -370,6 +370,7 @@ components:
         - hex_encryption_key
         - hex_chain_code
         - encryption_password
+        - passkey_pubkey_hash
       properties:
         session_id:
           type: string
@@ -390,6 +391,13 @@ components:
           description: Password used to encrypt the vault backup
         lib_type:
           $ref: "#/components/schemas/LibType"
+        passkey_pubkey_hash:
+          type: string
+          description: |
+            SHA-256 hash of the client's passkey public key, hex-encoded.
+            Used together with the session ID to key the challenge. The full
+            public key is provided later in `/vault/create/prove`.
+          pattern: "^[0-9a-fA-F]{64}$"
 
     VaultGetResponse:
       type: object
@@ -460,6 +468,7 @@ components:
         - hex_encryption_key
         - derive_path
         - vault_password
+        - passkey_pubkey_hash
       properties:
         public_key:
           type: string
@@ -495,6 +504,13 @@ components:
           type: boolean
           description: Use ML-DSA (post-quantum Dilithium) signing
           default: false
+        passkey_pubkey_hash:
+          type: string
+          description: |
+            SHA-256 hash of the client's passkey public key, hex-encoded.
+            Used together with the session ID to key the challenge. The full
+            public key is provided later in `/vault/sign/prove`.
+          pattern: "^[0-9a-fA-F]{64}$"
 
     ChallengeResponse:
       type: object
@@ -524,24 +540,22 @@ components:
       type: object
       required:
         - session
-        - challenge
-        - passkey_pubkey_hash
+        - passkey_pubkey
         - signature
       properties:
         session:
           type: string
           format: uuid
-          description: Session identifier from the challenge response.
-        challenge:
-          type: string
-          description: The challenge nonce that was signed.
-          pattern: "^[0-9a-fA-F]{64}$"
-        passkey_pubkey_hash:
+          description: |
+            Session identifier from the original request. Together with the
+            SHA-256 hash of `passkey_pubkey`, this identifies the challenge
+            to verify against.
+        passkey_pubkey:
           type: string
           description: |
-            SHA-256 hash of the client's passkey public key, hex-encoded.
-            Used to look up the registered public key for verification.
-          pattern: "^[0-9a-fA-F]{64}$"
+            The client's full passkey public key (ECDSA P-256 / secp256r1),
+            hex-encoded. The server computes SHA-256(passkey_pubkey) to look
+            up the challenge issued during the initial request.
         signature:
           type: string
           description: |

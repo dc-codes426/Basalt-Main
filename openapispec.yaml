@@ -69,12 +69,12 @@ paths:
   /vault/create:
     post:
       operationId: createVault
-      summary: Create a new vault (keygen)
+      summary: Initiate vault creation
       description: |
-        Initiates a new vault key generation ceremony. Enqueues an async
-        `key:generation` (GG20) or `key:generationDKLS` (DKLS) task with a
-        7-minute timeout. The server participates as one party in the TSS
-        protocol.
+        Validates the vault creation request and returns a challenge nonce
+        that must be signed with the client's passkey. The keygen ceremony
+        is not started until the client submits a valid proof via
+        `/vault/create/proof`.
       tags: [Vault]
       requestBody:
         required: true
@@ -84,9 +84,44 @@ paths:
               $ref: "#/components/schemas/VaultCreateRequest"
       responses:
         "200":
-          description: Vault creation initiated
+          description: Challenge issued; client must prove passkey ownership via `/vault/create/proof`.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ChallengeResponse"
         "400":
           $ref: "#/components/responses/BadRequest"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+
+  /vault/create/proof:
+    post:
+      operationId: createVaultProof
+      summary: Submit passkey proof to authorize vault creation
+      description: |
+        Completes the vault creation authorization by providing a passkey
+        signature over the challenge nonce returned by `/vault/create`. The
+        auth service verifies the signature against the stored public key
+        for the given public key hash. On success, the keygen ceremony is
+        initiated.
+      tags: [Vault]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ProofRequest"
+      responses:
+        "200":
+          description: Proof verified; vault creation initiated.
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          description: Proof verification failed (invalid signature or expired challenge).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
         "429":
           $ref: "#/components/responses/TooManyRequests"
 
@@ -164,11 +199,11 @@ paths:
   /vault/sign:
     post:
       operationId: signMessages
-      summary: Sign messages with vault key
+      summary: Initiate a signing session
       description: |
-        Enqueues a signing operation for one or more messages. Returns a task
-        ID that can be used to poll for results. Enqueues an async `key:sign`
-        (GG20) or `key:signDKLS` (DKLS) task with a 2-minute timeout.
+        Validates the signing request and returns a challenge nonce that must
+        be signed with the client's passkey. The actual signing task is not
+        enqueued until the client submits a valid proof via `/vault/sign/proof`.
       tags: [Signing]
       requestBody:
         required: true
@@ -178,7 +213,36 @@ paths:
               $ref: "#/components/schemas/KeysignRequest"
       responses:
         "200":
-          description: Signing task enqueued; returns the async task ID
+          description: Challenge issued; client must prove passkey ownership via `/vault/sign/proof`.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ChallengeResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+
+  /vault/sign/proof:
+    post:
+      operationId: signProof
+      summary: Submit passkey proof to authorize signing
+      description: |
+        Completes the signing authorization by providing a passkey signature
+        over the challenge nonce returned by `/vault/sign`. The auth service
+        verifies the signature against the stored public key for the given
+        public key hash. On success, the signing task is enqueued and the
+        async task ID is returned.
+      tags: [Signing]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ProofRequest"
+      responses:
+        "200":
+          description: Proof verified; signing task enqueued.
           content:
             application/json:
               schema:
@@ -187,6 +251,12 @@ paths:
                 example: "asynq:task:abc123"
         "400":
           $ref: "#/components/responses/BadRequest"
+        "401":
+          description: Proof verification failed (invalid signature or expired challenge).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
         "429":
           $ref: "#/components/responses/TooManyRequests"
 
@@ -425,6 +495,58 @@ components:
           type: boolean
           description: Use ML-DSA (post-quantum Dilithium) signing
           default: false
+
+    ChallengeResponse:
+      type: object
+      required:
+        - challenge
+        - session
+      properties:
+        challenge:
+          type: string
+          description: |
+            Hex-encoded random nonce (32 bytes). The client must sign this
+            value with their passkey and submit the result to the corresponding
+            proof endpoint.
+          pattern: "^[0-9a-fA-F]{64}$"
+        session:
+          type: string
+          format: uuid
+          description: |
+            Session identifier binding this challenge to the original request.
+            Must be included in the proof submission.
+        expires_at:
+          type: integer
+          format: int64
+          description: Unix timestamp (seconds) after which the challenge is no longer valid.
+
+    ProofRequest:
+      type: object
+      required:
+        - session
+        - challenge
+        - passkey_pubkey_hash
+        - signature
+      properties:
+        session:
+          type: string
+          format: uuid
+          description: Session identifier from the challenge response.
+        challenge:
+          type: string
+          description: The challenge nonce that was signed.
+          pattern: "^[0-9a-fA-F]{64}$"
+        passkey_pubkey_hash:
+          type: string
+          description: |
+            SHA-256 hash of the client's passkey public key, hex-encoded.
+            Used to look up the registered public key for verification.
+          pattern: "^[0-9a-fA-F]{64}$"
+        signature:
+          type: string
+          description: |
+            Hex-encoded signature over the challenge nonce, produced by the
+            client's passkey (ECDSA P-256 / secp256r1).
 
     CreateMldsaRequest:
       type: object

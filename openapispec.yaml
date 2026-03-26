@@ -128,11 +128,11 @@ paths:
   /vault/reshare:
     post:
       operationId: reshareVault
-      summary: Reshare vault key shares
+      summary: Initiate vault reshare
       description: |
-        Redistributes vault shares among a new set of parties. Enqueues an
-        async `key:reshare` (GG20) or `key:reshareDKLS` (DKLS) task with an
-        8-minute timeout. Requires a minimum 6-character encryption password.
+        Validates the reshare request and returns a challenge nonce that must
+        be signed with the client's passkey. The reshare task is not enqueued
+        until the client submits a valid proof via `/vault/reshare/prove`.
       tags: [Vault]
       requestBody:
         required: true
@@ -141,41 +141,103 @@ paths:
             schema:
               $ref: "#/components/schemas/ReshareRequest"
       responses:
-        "204":
-          description: Reshare task enqueued
+        "200":
+          description: Challenge issued; client must prove passkey ownership via `/vault/reshare/prove`.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ChallengeResponse"
         "400":
           $ref: "#/components/responses/BadRequest"
         "429":
           $ref: "#/components/responses/TooManyRequests"
 
-  /vault/get/{publicKeyECDSA}:
-    get:
-      operationId: getVault
-      summary: Retrieve vault metadata
+  /vault/reshare/prove:
+    post:
+      operationId: reshareVaultProof
+      summary: Submit passkey proof to authorize reshare
       description: |
-        Retrieves and decrypts a vault backup file by its ECDSA public key.
-        The encryption password must be provided via the `x-password` header
-        (base64-encoded or plaintext).
+        Completes the reshare authorization by providing a passkey signature
+        over the challenge nonce returned by `/vault/reshare`. On success,
+        the reshare task is enqueued.
       tags: [Vault]
-      parameters:
-        - $ref: "#/components/parameters/publicKeyECDSA"
-        - name: x-password
-          in: header
-          required: true
-          description: |
-            Encryption password for vault decryption. May be base64-encoded
-            or sent as plaintext; the server attempts base64 decoding first.
-          schema:
-            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ProofRequest"
       responses:
         "200":
-          description: Vault metadata
+          description: Proof verified; reshare task enqueued.
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          description: Proof verification failed (invalid signature or expired challenge).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+
+  /vault/get:
+    post:
+      operationId: getVault
+      summary: Initiate vault retrieval
+      description: |
+        Validates the request and returns a challenge nonce that must be
+        signed with the client's passkey. The vault data is not returned
+        until the client submits a valid proof via `/vault/get/prove`.
+      tags: [Vault]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/VaultGetRequest"
+      responses:
+        "200":
+          description: Challenge issued; client must prove passkey ownership via `/vault/get/prove`.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ChallengeResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "404":
+          description: Vault not found
+
+  /vault/get/prove:
+    post:
+      operationId: getVaultProof
+      summary: Submit passkey proof to retrieve vault
+      description: |
+        Completes the vault retrieval authorization by providing a passkey
+        signature over the challenge nonce. On success, returns the
+        decrypted vault metadata.
+      tags: [Vault]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ProofRequest"
+      responses:
+        "200":
+          description: Proof verified; vault metadata returned.
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/VaultGetResponse"
         "400":
           $ref: "#/components/responses/BadRequest"
+        "401":
+          description: Proof verification failed.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
         "404":
           description: Vault not found
 
@@ -263,11 +325,11 @@ paths:
   /vault/mldsa:
     post:
       operationId: createMldsaVault
-      summary: Add ML-DSA key to existing vault
+      summary: Initiate ML-DSA key addition
       description: |
-        Adds a post-quantum ML-DSA (Dilithium) key to an existing vault.
-        The vault must already exist in block storage. Enqueues an async
-        `key:createMldsa` task with a 5-minute timeout.
+        Validates the request and returns a challenge nonce that must be
+        signed with the client's passkey. The ML-DSA key creation is not
+        started until the client submits a valid proof via `/vault/mldsa/prove`.
       tags: [Vault]
       requestBody:
         required: true
@@ -277,11 +339,160 @@ paths:
               $ref: "#/components/schemas/CreateMldsaRequest"
       responses:
         "200":
-          description: ML-DSA key creation task enqueued
+          description: Challenge issued; client must prove passkey ownership via `/vault/mldsa/prove`.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ChallengeResponse"
         "400":
           $ref: "#/components/responses/BadRequest"
         "429":
           $ref: "#/components/responses/TooManyRequests"
+
+  /vault/mldsa/prove:
+    post:
+      operationId: createMldsaVaultProof
+      summary: Submit passkey proof to authorize ML-DSA key addition
+      description: |
+        Completes the ML-DSA authorization. On success, the ML-DSA key
+        creation task is enqueued.
+      tags: [Vault]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ProofRequest"
+      responses:
+        "200":
+          description: Proof verified; ML-DSA key creation started.
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          description: Proof verification failed.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+
+  /vault/passkey/add:
+    post:
+      operationId: addPasskey
+      summary: Initiate adding a passkey to a vault
+      description: |
+        Returns a challenge nonce that must be signed with an existing
+        authorized passkey. On successful proof via `/vault/passkey/add/prove`,
+        the new passkey is registered to the vault.
+      tags: [Passkey]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AddPasskeyRequest"
+      responses:
+        "200":
+          description: Challenge issued.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ChallengeResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "404":
+          description: Vault not found or no passkeys registered.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  /vault/passkey/add/prove:
+    post:
+      operationId: addPasskeyProof
+      summary: Submit proof to authorize adding a passkey
+      description: |
+        The signature must be from an existing passkey authorized for the
+        vault. On success, the new passkey is registered.
+      tags: [Passkey]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AddPasskeyProofRequest"
+      responses:
+        "200":
+          description: Passkey added successfully.
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          description: Proof verification failed.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  /vault/passkey/remove:
+    post:
+      operationId: removePasskey
+      summary: Initiate removing a passkey from a vault
+      description: |
+        Returns a challenge nonce that must be signed with a different
+        authorized passkey than the one being removed.
+      tags: [Passkey]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RemovePasskeyRequest"
+      responses:
+        "200":
+          description: Challenge issued.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ChallengeResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "404":
+          description: Vault not found or no passkeys registered.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  /vault/passkey/remove/prove:
+    post:
+      operationId: removePasskeyProof
+      summary: Submit proof to authorize removing a passkey
+      description: |
+        The signature must be from a different passkey than the one being
+        removed. The last passkey on a vault cannot be removed.
+      tags: [Passkey]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RemovePasskeyProofRequest"
+      responses:
+        "200":
+          description: Passkey removed successfully.
+        "400":
+          description: Cannot remove the last passkey, or validation error.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "401":
+          description: Proof verification failed.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
 
 components:
   parameters:
@@ -424,6 +635,7 @@ components:
         - hex_chain_code
         - old_parties
         - encryption_password
+        - passkey_pubkey_hash
       properties:
         public_key:
           type: string
@@ -451,6 +663,10 @@ components:
           type: string
           minLength: 6
           description: Encryption password (minimum 6 characters)
+        passkey_pubkey_hash:
+          type: string
+          description: SHA-256 hash of the client's passkey public key, hex-encoded.
+          pattern: "^[0-9a-fA-F]{64}$"
         old_reshare_prefix:
           type: string
           description: Prefix from previous reshare operation (if any)
@@ -562,6 +778,27 @@ components:
             Hex-encoded signature over the challenge nonce, produced by the
             client's passkey (ECDSA P-256 / secp256r1).
 
+    VaultGetRequest:
+      type: object
+      required:
+        - public_key_ecdsa
+        - x_password
+        - passkey_pubkey_hash
+      properties:
+        public_key_ecdsa:
+          type: string
+          description: 66-character hex-encoded ECDSA public key identifying the vault.
+          pattern: "^[0-9a-fA-F]{66}$"
+          minLength: 66
+          maxLength: 66
+        x_password:
+          type: string
+          description: Encryption password for vault decryption.
+        passkey_pubkey_hash:
+          type: string
+          description: SHA-256 hash of the client's passkey public key, hex-encoded.
+          pattern: "^[0-9a-fA-F]{64}$"
+
     CreateMldsaRequest:
       type: object
       required:
@@ -569,6 +806,7 @@ components:
         - session_id
         - hex_encryption_key
         - encryption_password
+        - passkey_pubkey_hash
       properties:
         public_key:
           type: string
@@ -585,6 +823,109 @@ components:
         encryption_password:
           type: string
           description: Encryption password for the vault
+        passkey_pubkey_hash:
+          type: string
+          description: SHA-256 hash of the client's passkey public key, hex-encoded.
+          pattern: "^[0-9a-fA-F]{64}$"
+
+    AddPasskeyRequest:
+      type: object
+      required:
+        - vault_pubkey
+        - new_passkey_pubkey_hash
+        - passkey_pubkey_hash
+      properties:
+        vault_pubkey:
+          type: string
+          description: Public key of the vault to add the passkey to, hex-encoded.
+        new_passkey_pubkey_hash:
+          type: string
+          description: SHA-256 hash of the new passkey's public key, hex-encoded.
+          pattern: "^[0-9a-fA-F]{64}$"
+        passkey_pubkey_hash:
+          type: string
+          description: |
+            SHA-256 hash of the existing authorized passkey used to prove
+            ownership. This passkey signs the challenge.
+          pattern: "^[0-9a-fA-F]{64}$"
+
+    AddPasskeyProofRequest:
+      type: object
+      required:
+        - session
+        - passkey_pubkey
+        - signature
+        - new_passkey_pubkey
+      properties:
+        session:
+          type: string
+          format: uuid
+          description: Session identifier from the challenge response.
+        passkey_pubkey:
+          type: string
+          description: |
+            Full public key of the existing authorized passkey (P-256),
+            hex-encoded. Used to verify the signature.
+        signature:
+          type: string
+          description: |
+            Hex-encoded signature over the challenge nonce, produced by
+            the existing authorized passkey.
+        new_passkey_pubkey:
+          type: string
+          description: |
+            Full public key of the new passkey to register (P-256),
+            hex-encoded. The server computes its SHA-256 hash and
+            registers it to the vault.
+
+    RemovePasskeyRequest:
+      type: object
+      required:
+        - vault_pubkey
+        - remove_passkey_pubkey_hash
+        - passkey_pubkey_hash
+      properties:
+        vault_pubkey:
+          type: string
+          description: Public key of the vault, hex-encoded.
+        remove_passkey_pubkey_hash:
+          type: string
+          description: SHA-256 hash of the passkey to remove, hex-encoded.
+          pattern: "^[0-9a-fA-F]{64}$"
+        passkey_pubkey_hash:
+          type: string
+          description: |
+            SHA-256 hash of the authorized passkey signing the challenge.
+            Must be different from `remove_passkey_pubkey_hash`.
+          pattern: "^[0-9a-fA-F]{64}$"
+
+    RemovePasskeyProofRequest:
+      type: object
+      required:
+        - session
+        - passkey_pubkey
+        - signature
+        - remove_passkey_pubkey_hash
+      properties:
+        session:
+          type: string
+          format: uuid
+          description: Session identifier from the challenge response.
+        passkey_pubkey:
+          type: string
+          description: |
+            Full public key of the authorized passkey signing the proof
+            (P-256), hex-encoded. Must be different from the passkey
+            being removed.
+        signature:
+          type: string
+          description: |
+            Hex-encoded signature over the challenge nonce, produced by
+            the authorized passkey.
+        remove_passkey_pubkey_hash:
+          type: string
+          description: |
+            SHA-256 hash of the passkey to remove, hex-encoded.
 
 tags:
   - name: Health
@@ -593,3 +934,5 @@ tags:
     description: Vault lifecycle — create, reshare, migrate, import, retrieve
   - name: Signing
     description: Message signing operations
+  - name: Passkey
+    description: Passkey management — add and remove passkeys from vaults

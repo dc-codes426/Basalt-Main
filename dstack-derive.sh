@@ -36,10 +36,10 @@ derive_key() {
     _key=$(echo "$_response" | sed -n 's/.*"key"[[:space:]]*:[[:space:]]*"\([0-9a-fA-F]*\)".*/\1/p')
 
     if [ -z "$_key" ]; then
-        echo "derive_key: failed to parse key from dstack response for path '$_path'" >&2
-        echo "derive_key: response was: $_response" >&2
+	    echo "derive_key: failed to parse key from dstack response for path '$_path' (unexpected response)" >&2
         return 1
     fi
-
+    
+    echo "derive_key successful for path '$_path'"
     printf '%s' "$_key"
 }

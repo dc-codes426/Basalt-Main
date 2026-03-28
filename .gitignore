@@ -16,3 +16,6 @@ config.example.yaml
 .env
 .env.*
 !.env.example
+
+# Pre-launch script (contains deployment-specific logic)
+prelaunch.sh

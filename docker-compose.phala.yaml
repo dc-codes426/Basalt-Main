@@ -104,14 +104,23 @@ services:
     container_name: basalt-minio-init
     depends_on:
       - minio
-    entrypoint: /bin/sh /basalt/minio-init-entrypoint.sh
+    entrypoint: >
+      /bin/sh -c "
+      for i in 1 2 3 4 5 6; do
+        mc alias set local http://minio:9000 $${MINIO_ROOT_USER} $${MINIO_ROOT_PASSWORD} && break;
+        echo 'Waiting for MinIO...' && sleep 5;
+      done;
+      mc mb --ignore-existing local/$${BLOCK_STORAGE_BUCKET};
+      mc encrypt set sse-s3 local/$${BLOCK_STORAGE_BUCKET} || echo 'SSE not available - skipped';
+      mc admin user add local vultiserver $${MINIO_VULTISERVER_PASSWORD};
+      mc admin policy attach local readwrite --user vultiserver;
+      echo 'MinIO init completed successfully.';
+      "
     environment:
       MINIO_ROOT_USER: ${MINIO_ROOT_USER:-minioadmin}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
+      MINIO_VULTISERVER_PASSWORD: ${MINIO_VULTISERVER_PASSWORD}
       BLOCK_STORAGE_BUCKET: ${BLOCK_STORAGE_BUCKET:-vaults}
-    volumes:
-      - /var/run/dstack.sock:/var/run/dstack.sock
-      - ./dstack-derive.sh:/dstack-derive.sh:ro
-      - ./minio-init-entrypoint.sh:/basalt/minio-init-entrypoint.sh:ro
 
 volumes:
   redis_data:

@@ -112,11 +112,9 @@ services:
         condition: service_healthy
     entrypoint: >
       /bin/sh -c "
-      for i in 1 2 3 4 5 6; do
-        mc alias set local http://minio:9000 $${MINIO_ROOT_USER} $${MINIO_ROOT_PASSWORD} && break;
-        echo 'Waiting for MinIO...' && sleep 5;
-      done;
+      mc alias set local http://minio:9000 $${MINIO_ROOT_USER} $${MINIO_ROOT_PASSWORD};
       mc mb --ignore-existing local/$${BLOCK_STORAGE_BUCKET};
+      mc anonymous set none local/$${BLOCK_STORAGE_BUCKET};
       mc encrypt set sse-s3 local/$${BLOCK_STORAGE_BUCKET} || echo 'SSE not available - skipped';
       mc admin user add local vultiserver $${MINIO_VULTISERVER_PASSWORD} || true;
       mc admin policy attach local readwrite --user vultiserver;

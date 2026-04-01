@@ -92,6 +92,11 @@ services:
       - ./dstack-derive.sh:/dstack-derive.sh:ro
       - ./minio-entrypoint.sh:/basalt/minio-entrypoint.sh:ro
       - minio_data:/data
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
     logging:
       driver: json-file
       options:
@@ -103,7 +108,8 @@ services:
     image: minio/mc:latest
     container_name: basalt-minio-init
     depends_on:
-      - minio
+      minio:
+        condition: service_healthy
     entrypoint: >
       /bin/sh -c "
       for i in 1 2 3 4 5 6; do
@@ -112,8 +118,9 @@ services:
       done;
       mc mb --ignore-existing local/$${BLOCK_STORAGE_BUCKET};
       mc encrypt set sse-s3 local/$${BLOCK_STORAGE_BUCKET} || echo 'SSE not available - skipped';
-      mc admin user add local vultiserver $${MINIO_VULTISERVER_PASSWORD};
+      mc admin user add local vultiserver $${MINIO_VULTISERVER_PASSWORD} || true;
       mc admin policy attach local readwrite --user vultiserver;
+      mc admin user info local vultiserver > /dev/null || { echo 'ERROR: vultiserver user not found'; exit 1; };
       echo 'MinIO init completed successfully.';
       "
     environment:

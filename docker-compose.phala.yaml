@@ -1,30 +1,38 @@
 services:
   networking:
-    image: ghcr.io/dc-codes426/basalt-networking:887ecdd8289cf2a386ae5bdf87699e7417840d03
+    image: ghcr.io/dc-codes426/basalt-networking:36a112a60beb32df085a5fa50f5dc7ceab656eb1
     container_name: basalt-networking
+    env_file: .env
     ports:
       - "80:80"
     environment:
       - UPSTREAM_URL=http://vultiserver:8080
+      - AUTH_URL=http://auth:3000
     depends_on:
       - vultiserver
+      - auth
+    read_only: true
+    tmpfs:
+      - /tmp
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    mem_limit: 256m
+    restart: always
     logging:
       driver: json-file
       options:
         max-size: "100m"
         max-file: "5"
-    restart: always
 
   vultiserver:
-    image: ghcr.io/dc-codes426/basalt-vultiserver:01013b328735061ee034d5015557d49008c7ca80
+    image: ghcr.io/dc-codes426/basalt-vultiserver:243bf2071419f5565fbfd96ea12438f0a1d48ce3
     container_name: basalt-vultiserver
-    entrypoint: /bin/sh /basalt/vultiserver-entrypoint.sh
+    env_file: .env
     ports:
       - "8080:8080"
     volumes:
-      - /var/run/dstack.sock:/var/run/dstack.sock
-      - ./dstack-derive.sh:/dstack-derive.sh:ro
-      - ./vultiserver-entrypoint.sh:/basalt/vultiserver-entrypoint.sh:ro
       - vultiserver_vaults:/root/vaults
     environment:
       SERVER_HOST: "0.0.0.0"
@@ -35,84 +43,112 @@ services:
       RELAY_SERVER: ${RELAY_SERVER:-https://api.vultisig.com/router}
       BLOCK_STORAGE_HOST: http://minio:9000
       BLOCK_STORAGE_REGION: us-east-1
-      BLOCK_STORAGE_ACCESS_KEY: ${MINIO_ROOT_USER:-minioadmin}
       BLOCK_STORAGE_BUCKET: ${BLOCK_STORAGE_BUCKET:-vaults}
+      BLOCK_STORAGE_ACCESS_KEY: vultiserver
+      BLOCK_STORAGE_SECRET: ${MINIO_VULTISERVER_PASSWORD}
     depends_on:
-      - redis
-      - minio-init
+      redis:
+        condition: service_healthy
+      minio-init:
+        condition: service_completed_successfully
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    mem_limit: 512m
+    restart: always
     logging:
       driver: json-file
       options:
         max-size: "100m"
         max-file: "5"
-    restart: always
 
   redis:
-    image: redis:7-alpine
+    image: redis:8
     container_name: basalt-redis
-    entrypoint: /bin/sh /basalt/redis-entrypoint.sh
+    env_file: .env
+    command: redis-server --requirepass ${REDIS_PASSWORD}
+    healthcheck:
+      test: ["CMD", "sh", "-c", "redis-cli -a $REDIS_PASSWORD ping"]
+      interval: 30s
+      timeout: 1s
+      retries: 3
     volumes:
-      - /var/run/dstack.sock:/var/run/dstack.sock
-      - ./dstack-derive.sh:/dstack-derive.sh:ro
-      - ./redis-entrypoint.sh:/basalt/redis-entrypoint.sh:ro
       - redis_data:/data
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    cap_add:
+      - SETUID
+      - SETGID
+      - SETPCAP
+    mem_limit: 256m
+    restart: always
     logging:
       driver: json-file
       options:
         max-size: "100m"
         max-file: "5"
-    restart: always
 
   admin-internal:
-    image: ghcr.io/dc-codes426/basalt-admin-internal:62a127f9760c1409d1e423cd9288cd845660a8bb
+    image: ghcr.io/dc-codes426/basalt-admin-internal:30eff481a397c41ffe7f48f7c61c99bade410494
     container_name: basalt-admin-internal
-    entrypoint: /bin/sh /basalt/admin-internal-entrypoint.sh
+    env_file: .env
     ports:
       - "3001:3000"
-    volumes:
-      - /var/run/dstack.sock:/var/run/dstack.sock
-      - ./dstack-derive.sh:/dstack-derive.sh:ro
-      - ./admin-internal-entrypoint.sh:/basalt/admin-internal-entrypoint.sh:ro
+    read_only: true
+    tmpfs:
+      - /tmp
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    mem_limit: 128m
+    restart: always
     logging:
       driver: json-file
       options:
         max-size: "100m"
         max-file: "5"
-    restart: always
 
   minio:
-    image: minio/minio:latest
+    image: minio/minio:RELEASE.2025-09-07T16-13-09Z
     container_name: basalt-minio
-    entrypoint: /bin/sh /basalt/minio-entrypoint.sh
+    env_file: .env
+    command: ["server", "/data"]
     environment:
-      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-minioadmin}
-      MINIO_SSE_KEY_PATH: basalt/vault-encryption
-    volumes:
-      - /var/run/dstack.sock:/var/run/dstack.sock
-      - ./dstack-derive.sh:/dstack-derive.sh:ro
-      - ./minio-entrypoint.sh:/basalt/minio-entrypoint.sh:ro
-      - minio_data:/data
+      MINIO_ROOT_USER: minioadmin
+      MINIO_BROWSER: "off"
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
       interval: 30s
       timeout: 5s
       retries: 3
+    volumes:
+      - minio_data:/data
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    mem_limit: 512m
+    restart: always
     logging:
       driver: json-file
       options:
         max-size: "100m"
         max-file: "5"
-    restart: always
 
   minio-init:
-    image: minio/mc:latest
+    image: minio/mc:RELEASE.2025-08-13T08-35-41Z
     container_name: basalt-minio-init
+    env_file: .env
     depends_on:
       minio:
         condition: service_healthy
     entrypoint: >
       /bin/sh -c "
-      mc alias set local http://minio:9000 $${MINIO_ROOT_USER} $${MINIO_ROOT_PASSWORD};
+      mc alias set local http://minio:9000 minioadmin $${MINIO_ROOT_PASSWORD};
       mc mb --ignore-existing local/$${BLOCK_STORAGE_BUCKET};
       mc anonymous set none local/$${BLOCK_STORAGE_BUCKET};
       mc encrypt set sse-s3 local/$${BLOCK_STORAGE_BUCKET} || echo 'SSE not available - skipped';
@@ -122,12 +158,32 @@ services:
       echo 'MinIO init completed successfully.';
       "
     environment:
-      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-minioadmin}
-      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
-      MINIO_VULTISERVER_PASSWORD: ${MINIO_VULTISERVER_PASSWORD}
       BLOCK_STORAGE_BUCKET: ${BLOCK_STORAGE_BUCKET:-vaults}
+
+  auth:
+    image: ghcr.io/dc-codes426/basalt-auth:808b06a7a33086efd72512e9ea70a6e79077d46e
+    container_name: basalt-auth
+    env_file: .env
+    ports:
+      - "3003:3000"
+    volumes:
+      - auth_data:/data
+    environment:
+      AUTH_DB_PATH: /data/auth.db
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    mem_limit: 256m
+    restart: always
+    logging:
+      driver: json-file
+      options:
+        max-size: "100m"
+        max-file: "5"
 
 volumes:
   redis_data:
   vultiserver_vaults:
   minio_data:
+  auth_data:
